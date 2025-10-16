@@ -1,0 +1,33 @@
+module overflow_controller (
+    input  wire clk,
+    input  wire rst, // síncrono
+    input  wire calc_pulse, // pulso single-cycle de calc (sincronizado)
+    input  wire ovf_in,     // overflow desde add/sub
+    input  wire muldiv_err_in, // error desde mul/div
+    output reg  accept_write, // habilita escritura en accumulator
+    output reg  error_flag    // activa cuando hubo error; limpia en siguiente calc válido
+);
+    always @(posedge clk) begin
+        if (rst) begin
+            accept_write <= 1'b0;
+            error_flag <= 1'b0;
+        end else begin
+            // default
+            accept_write <= 1'b0;
+            if (calc_pulse) begin
+                if (ovf_in || muldiv_err_in) begin
+                    error_flag <= 1'b1;
+                    accept_write <= 1'b0;
+                end else begin
+                    // valid op: clear error and accept write
+                    error_flag <= 1'b0;
+                    accept_write <= 1'b1;
+                end
+            end else begin
+                // no calc: keep previous error_flag, no write
+                accept_write <= 1'b0;
+                error_flag <= error_flag;
+            end
+        end
+    end
+endmodule

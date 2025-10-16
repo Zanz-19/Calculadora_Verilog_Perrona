@@ -1,0 +1,51 @@
+module alu_shift_mul2_div2 (
+    input  wire signed [7:0] a,
+    input  wire op_mul2, // 1 -> mul2, 0 -> div2
+    output reg  signed [7:0] result,
+    output reg  err // 1 when operation not allowed (e.g., |a| > 63 for mul2)
+);
+    // use 9-bit intermediate to detect overflow safely
+    wire signed [8:0] a_ext;
+    wire signed [8:0] mul_tmp;
+    reg [7:0] abs_a;
+    integer abs_int;
+
+    assign a_ext = {a[7], a}; // sign extend to 9 bits
+    assign mul_tmp = a_ext <<< 1;
+
+    always @(*) begin
+        err = 1'b0;
+        result = 8'sd0;
+        // compute absolute value safely (treat -128 specially)
+        if (a == -8'sd128) begin
+            abs_a = 8'd128; // represented in 8-bit reg but value 128 used in comparison
+        end else begin
+            abs_a = a[7] ? -a : a;
+        end
+        abs_int = abs_a;
+
+        if (op_mul2) begin
+            if (abs_int > 63) begin
+                err = 1'b1;
+                result = a; // don't change; controller will block load
+            end else begin
+                result = mul_tmp[7:0];
+                err = 1'b0;
+            end
+        end else begin
+            // division by 2 trunc toward zero
+            if (a >= 0) begin
+                // arithmetic shift right is fine
+                result = a >>> 1;
+            end else begin
+                // negative: trunc toward zero -> - ( ( -a ) >> 1 )
+                if (a == -8'sd128) begin
+                    result = -8'sd64;
+                end else begin
+                    result = - ( ( -a ) >>> 1 );
+                end
+            end
+            err = 1'b0;
+        end
+    end
+endmodule

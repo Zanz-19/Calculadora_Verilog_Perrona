@@ -1,0 +1,18 @@
+module display_driver_top (
+    input  wire [3:0] d4,
+    input  wire [3:0] d3,
+    input  wire [3:0] d2,
+    input  wire [3:0] d1,
+    input  wire [3:0] d0,
+    output wire [6:0] disp4,
+    output wire [6:0] disp3,
+    output wire [6:0] disp2,
+    output wire [6:0] disp1,
+    output wire [6:0] disp0
+);
+    seven_seg_decoder dec4(.digit(d4), .seg(disp4));
+    seven_seg_decoder dec3(.digit(d3), .seg(disp3));
+    seven_seg_decoder dec2(.digit(d2), .seg(disp2));
+    seven_seg_decoder dec1(.digit(d1), .seg(disp1));
+    seven_seg_decoder dec0(.digit(d0), .seg(disp0));
+endmodule

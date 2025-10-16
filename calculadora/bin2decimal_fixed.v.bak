@@ -1,0 +1,40 @@
+module bin2decimal_fixed (
+    input  wire signed [7:0] acc,
+    output reg  [3:0] d4,
+    output reg  [3:0] d3,
+    output reg  [3:0] d2,
+    output reg  [3:0] d1,
+    output reg  [3:0] d0,
+    output reg         sign
+);
+    integer mag;
+    integer integer_part;
+    integer rem;
+    integer tmp;
+
+    always @(*) begin
+        sign = acc[7];
+        // magnitude
+        if (acc == -8'sd128) begin
+            mag = 128;
+        end else if (sign) begin
+            mag = -acc;
+        end else begin
+            mag = acc;
+        end
+
+        // integer part (units) = mag / 100
+        integer_part = mag / 100; // 0..1 (given mag <= 128)
+        rem = mag % 100; // 0..99
+
+        // decimals
+        d1 = (rem / 10) % 10; // décimas
+        d0 = rem % 10;        // centésimas
+
+        // units/tens/hundreds derived from integer_part (for generality)
+        tmp = integer_part;
+        d2 = tmp % 10; tmp = tmp / 10;
+        d3 = tmp % 10; tmp = tmp / 10;
+        d4 = tmp % 10;
+    end
+endmodule

@@ -1,0 +1,132 @@
+
+module frac_manager (
+    input  wire        clk,
+    input  wire        rst,
+    input  wire        calc_pulse,    // pulso de cálculo (sincronizado / debounced)
+    input  wire [1:0]  op_sel,        // 00 add,01 sub,10 mul2,11 div2
+    input  wire signed [7:0] acc_q,   // acumulador entero actual (signed)
+    input  wire signed [7:0] sel_res, // resultado entero calculado por result_mux (para add/sub)
+    input  wire        ovf_from_mux,  // overflow from add/sub (si existe)
+    input  wire        muldiv_err_in, // error from mul/div ALU
+    output reg  signed [7:0] next_int, // siguiente entero a escribir en acc (si accept_write)
+    output reg  [6:0]  next_frac,     // siguiente centésimas 0..99
+    output reg         frac_err       // error (overflow numeric)
+);
+
+    // temp wide signed to hold scaled values: acc*100 + frac  -> max ~ 127*100 + 99 = 12799 < 2^15
+    reg signed [17:0] scaled;      // enough bits for signed scaled value
+    reg signed [17:0] scaled_res;  // after op
+    integer abs_tmp;
+    integer mag_abs;
+
+    // hold current frac across cycles
+    reg [6:0] frac_q; // 0..99
+    initial begin
+        frac_q = 7'd0;
+        next_frac = 7'd0;
+        next_int = 8'sd0;
+        frac_err = 1'b0;
+    end
+
+    // External reset or calc pulse update:
+    always @(posedge clk) begin
+        if (rst) begin
+            frac_q <= 7'd0;
+            next_frac <= 7'd0;
+            next_int <= 8'sd0;
+            frac_err <= 1'b0;
+        end else begin
+            // Default: keep previous (unless calc_pulse triggers)
+            if (calc_pulse) begin
+                frac_err <= 1'b0;
+                // Build signed scaled value: scaled = signed(acc_q) *100 + sign(frac)*??
+                // If acc_q is negative, scaled should be -(abs(acc_q)*100 + frac_q)
+                if (acc_q == -8'sd128) begin
+                    // edge case: -128 * 100 = -12800
+                    scaled = -18'sd12800 - frac_q;
+                end else begin
+                    if (acc_q[7]) begin
+                        // negative
+                        mag_abs = -acc_q;
+                        scaled = - (mag_abs * 100) - frac_q;
+                    end else begin
+                        scaled = (acc_q * 100) + frac_q;
+                    end
+                end
+
+                case (op_sel)
+                    2'b00, 2'b01: begin
+                        // add / sub: integer result already computed by result_mux: sel_res
+                        // keep frac unchanged
+                        // if add/sub produced overflow (ovf_from_mux) then set frac_err and don't update nexts
+                        if (ovf_from_mux) begin
+                            frac_err <= 1'b1;
+                            // maintain previous values (no update)
+                            next_int <= acc_q;
+                            next_frac <= frac_q;
+                        end else begin
+                            next_int <= sel_res;
+                            next_frac <= frac_q;
+                        end
+                    end
+
+                    2'b10: begin
+                        // Multiply by 2: scaled_res = scaled * 2
+                        scaled_res = scaled <<< 1; // signed multiply by 2
+                        // Compute next_int and next_frac from scaled_res
+                        // Truncate toward zero when dividing by 100 to get ints (standard integer division)
+                        // But scaled_res may be negative: handle sign properly
+                        if (scaled_res >= 0) begin
+                            next_int <= $signed(scaled_res / 100);
+                            next_frac <= (scaled_res % 100);
+                        end else begin
+                            // scaled_res negative
+                            // use negative division result (trunc toward zero)
+                            // In Verilog, / for signed does trunc toward zero for synthesizable; still do explicit:
+                            next_int <= - ( (-scaled_res) / 100 );
+                            next_frac <= ( (-scaled_res) % 100 );
+                        end
+                        // Check overflow range for integer
+                        if ((next_int > 8'sd127) || (next_int < -8'sd128)) begin
+                            frac_err <= 1'b1;
+                            // Keep old values
+                            next_int <= acc_q;
+                            next_frac <= frac_q;
+                        end
+                    end
+
+                    2'b11: begin
+                        // Divide by 2: scaled_res = trunc_toward_zero( scaled / 2 )
+                        // Implement trunc toward zero explicitly
+                        if (scaled >= 0) scaled_res = scaled >>> 1;
+                        else scaled_res = - ( ((-scaled) >>> 1) );
+                        // Now split
+                        if (scaled_res >= 0) begin
+                            next_int <= $signed(scaled_res / 100);
+                            next_frac <= (scaled_res % 100);
+                        end else begin
+                            next_int <= - ( ((-scaled_res) / 100) );
+                            next_frac <= ( (-scaled_res) % 100 );
+                        end
+                        // Overflow unlikely, but guard
+                        if ((next_int > 8'sd127) || (next_int < -8'sd128)) begin
+                            frac_err <= 1'b1;
+                            next_int <= acc_q;
+                            next_frac <= frac_q;
+                        end
+                    end
+
+                    default: begin
+                        // default: no change
+                        next_int <= acc_q;
+                        next_frac <= frac_q;
+                    end
+                endcase
+
+                // commit frac_q with next_frac (only if no error)
+                if (!frac_err) frac_q <= next_frac;
+            end // calc_pulse
+        end // rst else
+    end // always
+
+endmodule

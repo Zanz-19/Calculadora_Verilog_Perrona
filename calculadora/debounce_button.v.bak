@@ -1,0 +1,37 @@
+module debounce_button #(parameter CNT_WIDTH = 20) (
+    input  wire clk,
+    input  wire rst,      // síncrono
+    input  wire btn_raw,  // entrada cruda (pulsador)
+    output reg  btn_pulse // pulso single-cycle
+);
+    // contador
+    reg [CNT_WIDTH-1:0] cnt;
+    reg stable;
+    reg prev_stable;
+
+    // requiere CNT_MAX cycles of same value; CNT_MAX = 2^CNT_WIDTH - 1
+    always @(posedge clk) begin
+        if (rst) begin
+            cnt <= {CNT_WIDTH{1'b0}};
+            stable <= 1'b0;
+            prev_stable <= 1'b0;
+            btn_pulse <= 1'b0;
+        end else begin
+            btn_pulse <= 1'b0; // default
+            if (btn_raw == stable) begin
+                cnt <= {CNT_WIDTH{1'b0}};
+            end else begin
+                cnt <= cnt + 1'b1;
+                if (&cnt) begin // when counter saturates (all ones)
+                    prev_stable <= stable;
+                    stable <= btn_raw;
+                    // rising edge on stable?
+                    if ((prev_stable == 1'b0) && (btn_raw == 1'b1)) begin
+                        btn_pulse <= 1'b1; // single clock pulse
+                    end
+                    cnt <= {CNT_WIDTH{1'b0}};
+                end
+            end
+        end
+    end
+endmodule

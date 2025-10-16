@@ -1,0 +1,19 @@
+module accumulator (
+    input  wire clk,
+    input  wire rst, // síncrono
+    input  wire load_en,
+    input  wire signed [7:0] d_in,
+    output reg  signed [7:0] acc_out
+);
+    always @(posedge clk) begin
+        if (rst) begin
+            acc_out <= 8'sd0;
+        end else begin
+            if (load_en) begin
+                acc_out <= d_in;
+            end else begin
+                acc_out <= acc_out;
+            end
+        end
+    end
+endmodule

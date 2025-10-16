@@ -1,0 +1,18 @@
+module alu_add_sub (
+    input  wire signed [7:0] a,
+    input  wire signed [7:0] b,
+    input  wire op_add,              // 1 = add, 0 = sub (a - b)
+    output wire signed [7:0] result,
+    output wire ovf                  // flag de overflow
+);
+    wire signed [8:0] b_used_ext;
+    wire signed [8:0] sum_ext;
+    wire signed [7:0] b_used;
+
+    assign b_used = op_add ? b : -b;
+    assign sum_ext = $signed(a) + $signed(b_used);
+    assign result = sum_ext[7:0];
+
+    assign ovf = (~a[7] & ~b_used[7] & result[7]) |
+                 ( a[7] &  b_used[7] & ~result[7]);
+endmodule
